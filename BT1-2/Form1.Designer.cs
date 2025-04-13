@@ -54,15 +54,19 @@
             btnVerifyLoadedChain = new Button();
             btnLoadChain = new Button();
             rtbLoadedChain = new RichTextBox();
+            btnSelectImage = new Button();
+            pictureBoxImage = new PictureBox();
             grpTransaction.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)numAmount).BeginInit();
             grpProcessing.SuspendLayout();
             grpBlockchain.SuspendLayout();
             grpFileOperations.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)pictureBoxImage).BeginInit();
             SuspendLayout();
             // 
             // grpTransaction
             // 
+            grpTransaction.Controls.Add(btnSelectImage);
             grpTransaction.Controls.Add(btnCreateTransaction);
             grpTransaction.Controls.Add(numAmount);
             grpTransaction.Controls.Add(dtpDate);
@@ -74,7 +78,7 @@
             grpTransaction.Controls.Add(label1);
             grpTransaction.Location = new Point(12, 12);
             grpTransaction.Name = "grpTransaction";
-            grpTransaction.Size = new Size(400, 150);
+            grpTransaction.Size = new Size(579, 150);
             grpTransaction.TabIndex = 0;
             grpTransaction.TabStop = false;
             grpTransaction.Text = "Tạo Transaction";
@@ -245,18 +249,18 @@
             grpBlockchain.Controls.Add(btnSaveChain);
             grpBlockchain.Controls.Add(rtbBlockDetails);
             grpBlockchain.Controls.Add(lstBlocks);
-            grpBlockchain.Location = new Point(430, 12);
+            grpBlockchain.Location = new Point(597, 12);
             grpBlockchain.Name = "grpBlockchain";
-            grpBlockchain.Size = new Size(550, 400);
+            grpBlockchain.Size = new Size(383, 400);
             grpBlockchain.TabIndex = 2;
             grpBlockchain.TabStop = false;
             grpBlockchain.Text = "Blockchain";
             // 
             // btnSaveChain
             // 
-            btnSaveChain.Location = new Point(56, 360);
+            btnSaveChain.Location = new Point(8, 360);
             btnSaveChain.Name = "btnSaveChain";
-            btnSaveChain.Size = new Size(147, 29);
+            btnSaveChain.Size = new Size(125, 29);
             btnSaveChain.TabIndex = 3;
             btnSaveChain.Text = "Lưu chuỗi";
             btnSaveChain.UseVisualStyleBackColor = true;
@@ -264,9 +268,9 @@
             // 
             // rtbBlockDetails
             // 
-            rtbBlockDetails.Location = new Point(146, 28);
+            rtbBlockDetails.Location = new Point(139, 28);
             rtbBlockDetails.Name = "rtbBlockDetails";
-            rtbBlockDetails.Size = new Size(394, 319);
+            rtbBlockDetails.Size = new Size(236, 361);
             rtbBlockDetails.TabIndex = 1;
             rtbBlockDetails.Text = "";
             // 
@@ -274,10 +278,11 @@
             // 
             lstBlocks.FormattingEnabled = true;
             lstBlocks.ItemHeight = 21;
-            lstBlocks.Location = new Point(15, 28);
+            lstBlocks.Location = new Point(8, 28);
             lstBlocks.Name = "lstBlocks";
             lstBlocks.Size = new Size(125, 319);
             lstBlocks.TabIndex = 0;
+            lstBlocks.SelectedIndexChanged += lstBlocks_SelectedIndexChanged;
             // 
             // grpFileOperations
             // 
@@ -319,11 +324,31 @@
             rtbLoadedChain.TabIndex = 0;
             rtbLoadedChain.Text = "";
             // 
+            // btnSelectImage
+            // 
+            btnSelectImage.Location = new Point(439, 110);
+            btnSelectImage.Name = "btnSelectImage";
+            btnSelectImage.Size = new Size(94, 29);
+            btnSelectImage.TabIndex = 9;
+            btnSelectImage.Text = "Chọn ảnh";
+            btnSelectImage.UseVisualStyleBackColor = true;
+            btnSelectImage.Click += btnSelectImage_Click;
+            // 
+            // pictureBoxImage
+            // 
+            pictureBoxImage.Location = new Point(421, 180);
+            pictureBoxImage.Name = "pictureBoxImage";
+            pictureBoxImage.Size = new Size(159, 232);
+            pictureBoxImage.SizeMode = PictureBoxSizeMode.Zoom;
+            pictureBoxImage.TabIndex = 4;
+            pictureBoxImage.TabStop = false;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(9F, 21F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(982, 653);
+            Controls.Add(pictureBoxImage);
             Controls.Add(grpFileOperations);
             Controls.Add(grpBlockchain);
             Controls.Add(grpProcessing);
@@ -337,6 +362,7 @@
             grpProcessing.PerformLayout();
             grpBlockchain.ResumeLayout(false);
             grpFileOperations.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)pictureBoxImage).EndInit();
             ResumeLayout(false);
         }
 
@@ -369,5 +395,7 @@
         private RichTextBox rtbLoadedChain;
         private Label label5;
         private RichTextBox rtbMerkleTree;
+        private Button btnSelectImage;
+        private PictureBox pictureBoxImage;
     }
 }

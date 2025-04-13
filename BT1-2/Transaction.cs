@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Security.Cryptography;
 using Newtonsoft.Json;
+using System.Globalization;
 
 namespace BT1_2
 {
@@ -12,38 +13,37 @@ namespace BT1_2
     {
         public string Sender { get; set; }
         public string Receiver { get; set; }
-        public DateTime Date { get; set; }
+        private DateTime _date;
+        public DateTime Date
+        {
+            get => _date;
+            set => _date = value.ToUniversalTime();
+        }
         public decimal Amount { get; set; }
+        public string ImageData { get; set; }
         public string Hash { get; set; }
         public string Signature { get; set; }
 
         public Transaction()
         {
-            Date = DateTime.Now;
+            Date = DateTime.UtcNow;
         }
 
-        public Transaction(string sender, string receiver, DateTime date, decimal amount)
+        public Transaction(string sender, string receiver, DateTime date, decimal amount, string imageData = null)
         {
             Sender = sender;
             Receiver = receiver;
             Date = date;
             Amount = amount;
+            ImageData = imageData;
+            CalculateHash();
         }
 
         public string CalculateHash()
         {
-            string data = Sender + Receiver + Date.ToString() + Amount.ToString();
-            using (SHA256 sha256 = SHA256.Create())
-            {
-                byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(data));
-                StringBuilder builder = new StringBuilder();
-                for (int i = 0; i < bytes.Length; i++)
-                {
-                    builder.Append(bytes[i].ToString("x2"));
-                }
-                Hash = builder.ToString();
-                return Hash;
-            }
+            string data = Sender + Receiver + Date.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ") + Amount.ToString("F2", CultureInfo.InvariantCulture) + ImageData;
+            Hash = CryptoHelper.ComputeHash(data);
+            return Hash;
         }
 
         public string Sign(RSAParameters privateKey)

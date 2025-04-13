@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Security.Cryptography;
+using System.Linq;
 using System.Windows.Forms;
 using Newtonsoft.Json;
-using System.Drawing;
-using System.Text;
 
 namespace BT1_2
 {
@@ -14,43 +12,95 @@ namespace BT1_2
         private Blockchain blockchain;
         private Transaction currentTransaction;
         private string encryptionKey;
-        //private RichTextBox rtbMerkleTreeDisplay;
+        private string encryptedHash;
+        private string selectedImageBase64;
 
         public Form1()
         {
             InitializeComponent();
             blockchain = new Blockchain();
             encryptionKey = CryptoHelper.GenerateRandomKey(32);
-            //rtbMerkleTreeDisplay = rtbMerkleTree;
+            selectedImageBase64 = null;
             UpdateBlockchainList();
+        }
+
+        private void btnSelectImage_Click(object sender, EventArgs e)
+        {
+            using (OpenFileDialog dialog = new OpenFileDialog
+            {
+                Filter = "Image files (*.jpg;*.png;*.bmp)|*.jpg;*.png;*.bmp",
+                Title = "Chọn ảnh"
+            })
+            {
+                if (dialog.ShowDialog() == DialogResult.OK)
+                {
+                    try
+                    {
+                        // Đọc ảnh và chuyển thành Base64
+                        byte[] imageBytes = File.ReadAllBytes(dialog.FileName);
+                        // Giới hạn kích thước ảnh (ví dụ: 1MB)
+                        if (imageBytes.Length > 1_000_000)
+                        {
+                            MessageBox.Show("Ảnh quá lớn. Vui lòng chọn ảnh dưới 1MB.", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+
+                        selectedImageBase64 = Convert.ToBase64String(imageBytes);
+
+                        // Hiển thị ảnh trong PictureBox
+                        using (MemoryStream ms = new MemoryStream(imageBytes))
+                        {
+                            pictureBoxImage.Image = Image.FromStream(ms);
+                        }
+
+                        rtbProcessing.AppendText("Ảnh đã được chọn.\n");
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Lỗi khi tải ảnh: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
         }
 
         private void btnCreateTransaction_Click(object sender, EventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(txtSender.Text) || string.IsNullOrWhiteSpace(txtReceiver.Text))
+            string send = txtSender.Text.Trim();
+            string receiver = txtReceiver.Text.Trim();
+            if (string.IsNullOrWhiteSpace(send) || string.IsNullOrWhiteSpace(receiver))
             {
-                MessageBox.Show("Please enter both sender and receiver information.", "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Vui lòng nhập thông tin người gửi và người nhận.", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
+            }
+            if (numAmount.Value <= 0)
+            {
+                MessageBox.Show("Số tiền phải lớn hơn 0", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
 
             currentTransaction = new Transaction(
-                txtSender.Text,
-                txtReceiver.Text,
+                send,
+                receiver,
                 dtpDate.Value,
-                numAmount.Value
+                numAmount.Value,
+                selectedImageBase64
             );
 
             rtbProcessing.Clear();
-            rtbProcessing.AppendText("Transaction created:\n");
-            rtbProcessing.AppendText($"Sender: {currentTransaction.Sender}\n");
-            rtbProcessing.AppendText($"Receiver: {currentTransaction.Receiver}\n");
-            rtbProcessing.AppendText($"Date: {currentTransaction.Date}\n");
-            rtbProcessing.AppendText($"Amount: {currentTransaction.Amount:C}\n\n");
+            rtbProcessing.AppendText("Giao dịch được tạo:\n");
+            rtbProcessing.AppendText($"Người nhận: {currentTransaction.Sender}\n");
+            rtbProcessing.AppendText($"Người gửi: {currentTransaction.Receiver}\n");
+            rtbProcessing.AppendText($"Ngày gửi: {currentTransaction.Date}\n");
+            rtbProcessing.AppendText($"Số tiền: {currentTransaction.Amount:C}\n\n");
+            rtbProcessing.AppendText($"Ảnh: {(string.IsNullOrEmpty(selectedImageBase64) ? "Không có" : "Có")}\n\n");
 
             btnHash.Enabled = true;
             btnEncrypt.Enabled = false;
             btnSign.Enabled = false;
             btnVerify.Enabled = false;
+
+            // Reset ảnh sau khi tạo giao dịch
+            selectedImageBase64 = null;
+            pictureBoxImage.Image = null;
         }
 
         private void btnHash_Click(object sender, EventArgs e)
@@ -59,30 +109,23 @@ namespace BT1_2
                 return;
 
             string hash = currentTransaction.CalculateHash();
-            rtbProcessing.AppendText($"Hash calculation:\n");
-            rtbProcessing.AppendText($"Input: {currentTransaction.Sender}|{currentTransaction.Receiver}|{currentTransaction.Date}|{currentTransaction.Amount}\n");
-            rtbProcessing.AppendText($"Hash: {hash}\n\n");
+            rtbProcessing.AppendText($"Băm:\n{hash}\n\n");
 
             btnHash.Enabled = false;
             btnEncrypt.Enabled = true;
-            btnSign.Enabled = false;
-            btnVerify.Enabled = false;
         }
 
         private void btnEncrypt_Click(object sender, EventArgs e)
         {
             if (currentTransaction == null || string.IsNullOrEmpty(currentTransaction.Hash))
                 return;
+            encryptedHash = CryptoHelper.Encrypt(currentTransaction.Hash, encryptionKey);
+            rtbProcessing.AppendText($"Mã hóa:\n");
+            rtbProcessing.AppendText($"Băm: {currentTransaction.Hash}\n");
+            rtbProcessing.AppendText($"Mã hóa: {encryptedHash}\n\n");
 
-            string encrypted = CryptoHelper.Encrypt(currentTransaction.Hash, encryptionKey);
-            rtbProcessing.AppendText($"Encryption:\n");
-            rtbProcessing.AppendText($"Input: {currentTransaction.Hash}\n");
-            rtbProcessing.AppendText($"Encrypted: {encrypted}\n\n");
-
-            btnHash.Enabled = false;
             btnEncrypt.Enabled = false;
             btnSign.Enabled = true;
-            btnVerify.Enabled = false;
         }
 
         private void btnSign_Click(object sender, EventArgs e)
@@ -91,12 +134,10 @@ namespace BT1_2
                 return;
 
             string signature = currentTransaction.Sign(blockchain.PrivateKey);
-            rtbProcessing.AppendText($"Digital Signature:\n");
-            rtbProcessing.AppendText($"Data signed: {currentTransaction.Hash}\n");
-            rtbProcessing.AppendText($"Signature: {signature}\n\n");
+            rtbProcessing.AppendText($"Chữ ký số:\n");
+            rtbProcessing.AppendText($"Dữ liệu ký: {currentTransaction.Hash}\n");
+            rtbProcessing.AppendText($"Chữ ký: {signature.Substring(0, Math.Min(20, signature.Length))}...\n\n");
 
-            btnHash.Enabled = false;
-            btnEncrypt.Enabled = false;
             btnSign.Enabled = false;
             btnVerify.Enabled = true;
         }
@@ -107,33 +148,27 @@ namespace BT1_2
                 return;
 
             bool isValid = currentTransaction.VerifySignature(blockchain.PublicKey);
-            rtbProcessing.AppendText($"Signature Verification:\n");
-            rtbProcessing.AppendText($"Verification result: {(isValid ? "Valid ✓" : "Invalid ✗")}\n\n");
+            rtbProcessing.AppendText($"Xác minh chữ ký:\nKết quả: {(isValid ? "Hợp lệ ✓" : "Không hợp lệ ✗")}\n\n");
 
             if (isValid)
             {
                 blockchain.AddTransaction(currentTransaction);
-                rtbProcessing.AppendText($"Transaction added to pending transactions.\n");
-                rtbProcessing.AppendText($"Current pending transactions: {blockchain.PendingTransactions.Count}\n");
+                rtbProcessing.AppendText($"Giao dịch đã thêm vào danh sách chờ.\n");
+                rtbProcessing.AppendText($"Số giao dịch chờ: {blockchain.PendingTransactions.Count}\n\n");
 
-                if (blockchain.PendingTransactions.Count >= 5)
+                bool newBlockCreated = blockchain.PendingTransactions.Count == 0;
+                UpdateBlockchainList();
+
+                if (newBlockCreated)
                 {
-                    rtbProcessing.AppendText($"Reached 5 transactions - Creating a new block...\n");
-
-                    // Create the block
-                    blockchain.CreateBlock();
-
-                    // Update the display
-                    UpdateBlockchainList();
-
-                    // Select the latest block to display its details
-                    if (lstBlocks.Items.Count > 0)
-                    {
-                        lstBlocks.SelectedIndex = lstBlocks.Items.Count - 1;
-                    }
+                    rtbProcessing.AppendText("Đạt 2 giao dịch - Tạo khối mới...\n");
+                    rtbProcessing.AppendText("Khối mới đã được tạo.\n\n");;
+                }
+                if (lstBlocks.Items.Count > 0)
+                {
+                    lstBlocks.SelectedIndex = lstBlocks.Items.Count - 1;
                 }
 
-                // Reset form for next transaction
                 txtSender.Clear();
                 txtReceiver.Clear();
                 dtpDate.Value = DateTime.Now;
@@ -144,410 +179,283 @@ namespace BT1_2
                 btnEncrypt.Enabled = false;
                 btnSign.Enabled = false;
                 btnVerify.Enabled = false;
+                CheckDisplay();
             }
         }
 
-        private void lstBlocks_SelectedIndexChanged(object sender, EventArgs e)
+        private void CheckDisplay()
         {
-            if (lstBlocks.SelectedIndex >= 0 && lstBlocks.SelectedIndex < blockchain.Chain.Count)
+            if (lstBlocks.Items.Count != blockchain.Chain.Count)
             {
-                Block block = blockchain.Chain[lstBlocks.SelectedIndex];
-                DisplayBlockDetails(block, rtbBlockDetails);
-                DisplayMerkleTree(block);
-            }
-        }
-
-        private void DisplayBlockDetails(Block block, RichTextBox rtb)
-        {
-            rtb.Clear();
-            rtb.AppendText($"Block #{block.Index}\n");
-            rtb.AppendText($"Timestamp: {block.Timestamp}\n");
-            rtb.AppendText($"Previous Hash: {block.PreviousHash}\n");
-            rtb.AppendText($"Hash: {block.Hash}\n");
-            rtb.AppendText($"Nonce: {block.Nonce}\n");
-            rtb.AppendText($"Merkle Root: {block.MerkleRoot}\n\n");
-
-            rtb.AppendText($"Transactions ({block.Transactions.Count}):\n");
-            foreach (var transaction in block.Transactions)
-            {
-                rtb.AppendText($"- {transaction}\n");
-                rtb.AppendText($"  Hash: {transaction.Hash}\n");
-                rtb.AppendText($"  Signature: {(transaction.Signature?.Substring(0, Math.Min(20, transaction.Signature?.Length ?? 0)) + "...")}\n\n");
-            }
-        }
-
-        // Add this new method for displaying Merkle tree
-        private void DisplayMerkleTree(Block block)
-        {
-            rtbMerkleTree.Clear();
-
-            if (block.Transactions.Count == 0)
-            {
-                rtbMerkleTree.AppendText("No transactions in this block to build Merkle tree.");
+                string errorMsg = $"Lỗi: lstBlocks hiển thị {lstBlocks.Items.Count} khối, thực tế có {blockchain.Chain.Count} khối.\n";
+                rtbProcessing.AppendText(errorMsg);
+                MessageBox.Show(errorMsg, "Lỗi hiển thị", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
-            List<string> transactionHashes = new List<string>();
-            rtbMerkleTree.AppendText("Merkle Tree for Block #" + block.Index + "\n\n");
-
-            // Display transaction hashes (leaves of the tree)
-            rtbMerkleTree.AppendText("Transaction Hashes (Leaves):\n");
-            foreach (var transaction in block.Transactions)
+            if (lstBlocks.SelectedIndex >= 0)
             {
-                string hash = transaction.Hash ?? transaction.CalculateHash();
-                transactionHashes.Add(hash);
-                rtbMerkleTree.AppendText($"- {hash.Substring(0, Math.Min(12, hash.Length))}...\n");
-            }
+                Block block = blockchain.Chain[lstBlocks.SelectedIndex];
+                string blockDetails = rtbBlockDetails.Text;
+                if (!blockDetails.Contains(block.Hash) || !blockDetails.Contains(block.MerkleRoot))
+                    rtbProcessing.AppendText("Lỗi: rtbBlockDetails không hiển thị đúng chi tiết khối.\n");
 
-            // Build and display the Merkle tree
-            rtbMerkleTree.AppendText("\nMerkle Tree Structure:\n");
-            List<List<string>> merkleTreeLevels = BuildMerkleTreeLevels(transactionHashes);
-
-            for (int i = 0; i < merkleTreeLevels.Count; i++)
-            {
-                rtbMerkleTree.AppendText($"Level {i}: ");
-                foreach (var hash in merkleTreeLevels[i])
-                {
-                    rtbMerkleTree.AppendText($"{hash.Substring(0, Math.Min(8, hash.Length))}... ");
-                }
-                rtbMerkleTree.AppendText("\n");
-            }
-
-            rtbMerkleTree.AppendText("\nMerkle Root: " + block.MerkleRoot);
-        }
-
-        private List<List<string>> BuildMerkleTreeLevels(List<string> leaves)
-        {
-            List<List<string>> levels = new List<List<string>>();
-            levels.Add(new List<string>(leaves)); // Add leaf nodes
-
-            while (levels[levels.Count - 1].Count > 1)
-            {
-                List<string> currentLevel = levels[levels.Count - 1];
-                List<string> nextLevel = new List<string>();
-
-                for (int i = 0; i < currentLevel.Count; i += 2)
-                {
-                    if (i + 1 < currentLevel.Count)
-                    {
-                        // Hash pair of nodes
-                        string combinedHash = HashPair(currentLevel[i], currentLevel[i + 1]);
-                        nextLevel.Add(combinedHash);
-                    }
-                    else
-                    {
-                        // Odd node - promote to next level
-                        nextLevel.Add(currentLevel[i]);
-                    }
-                }
-
-                levels.Add(nextLevel);
-            }
-
-            return levels;
-        }
-
-        private string HashPair(string hash1, string hash2)
-        {
-            using (SHA256 sha256 = SHA256.Create())
-            {
-                string combinedHash = hash1 + hash2;
-                byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(combinedHash));
-                StringBuilder builder = new StringBuilder();
-                for (int i = 0; i < bytes.Length; i++)
-                {
-                    builder.Append(bytes[i].ToString("x2"));
-                }
-                return builder.ToString();
+                string merkleTree = rtbMerkleTree.Text;
+                if (!merkleTree.Contains(block.MerkleRoot))
+                    rtbProcessing.AppendText("Lỗi: rtbMerkleTree không hiển thị đúng gốc Merkle.\n");
             }
         }
 
         private void UpdateBlockchainList()
         {
-            int previousSelectedIndex = lstBlocks.SelectedIndex;
             lstBlocks.Items.Clear();
-
             foreach (var block in blockchain.Chain)
+                lstBlocks.Items.Add($"Khối #{block.Index} - {block.Transactions.Count} giao dịch - {block.Timestamp:O}");
+            if (lstBlocks.Items.Count > 0 && lstBlocks.SelectedIndex == -1)
+                lstBlocks.SelectedIndex = lstBlocks.Items.Count - 1;
+        }
+        private void lstBlocks_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (lstBlocks.SelectedIndex >= 0)
             {
-                lstBlocks.Items.Add($"Block #{block.Index} - {block.Transactions.Count} transactions - {block.Timestamp}");
+                Block block = blockchain.Chain[lstBlocks.SelectedIndex];
+                rtbBlockDetails.Clear();
+                rtbBlockDetails.AppendText($"Khối #{block.Index}\n");
+                rtbBlockDetails.AppendText($"Thời gian: {block.Timestamp:yyyy-MM-ddTHH:mm:ss.fffffffZ}\n");
+                rtbBlockDetails.AppendText($"Băm trước: {block.PreviousHash}\n");
+                rtbBlockDetails.AppendText($"Băm: {block.Hash}\n");
+                rtbBlockDetails.AppendText($"Nonce: {block.Nonce}\n");
+                rtbBlockDetails.AppendText($"Gốc Merkle: {block.MerkleRoot}\n\n");
+                rtbBlockDetails.AppendText($"Giao dịch ({block.Transactions.Count}):\n");
+                foreach (var tx in block.Transactions)
+                {
+                    rtbBlockDetails.AppendText($"- {tx}\n");
+                    if (!string.IsNullOrEmpty(tx.ImageData))
+                    {
+                        rtbBlockDetails.AppendText("  Có ảnh đính kèm.\n");
+                    }
+                }
+
+
+                rtbMerkleTree.Clear();
+                if (block.Transactions.Count == 0)
+                {
+                    rtbMerkleTree.AppendText("Không có giao dịch trong khối này.\n");
+                    return;
+                }
+
+                rtbMerkleTree.AppendText($"Cây Merkle cho Khối #{block.Index}\n\n");
+                List<string> txHashes = block.Transactions.ConvertAll(t => t.Hash ?? t.CalculateHash());
+                rtbMerkleTree.AppendText("Băm giao dịch:\n");
+                foreach (var hash in txHashes)
+                    rtbMerkleTree.AppendText($"- {hash.Substring(0, Math.Min(12, hash.Length))}...\n");
+
+                rtbMerkleTree.AppendText("\nCấu trúc cây Merkle:\n");
+                var levels = BuildMerkleTreeLevels(txHashes);
+                for (int i = 0; i < levels.Count; i++)
+                {
+                    rtbMerkleTree.AppendText($"Tầng {i}: ");
+                    foreach (var hash in levels[i])
+                        rtbMerkleTree.AppendText($"{hash.Substring(0, Math.Min(8, hash.Length))}... ");
+                    rtbMerkleTree.AppendText("\n");
+                }
+                rtbMerkleTree.AppendText($"\nGốc Merkle: {block.MerkleRoot}\n");
+
+                // Hiển thị ảnh nếu có
+                pictureBoxImage.Image = null;
+                if (block.Transactions.Any(tx => !string.IsNullOrEmpty(tx.ImageData)))
+                {
+                    var firstImageTx = block.Transactions.First(tx => !string.IsNullOrEmpty(tx.ImageData));
+                    try
+                    {
+                        byte[] imageBytes = Convert.FromBase64String(firstImageTx.ImageData);
+                        using (MemoryStream ms = new MemoryStream(imageBytes))
+                        {
+                            pictureBoxImage.Image = Image.FromStream(ms);
+                        }
+                    }
+                    catch
+                    {
+                        rtbProcessing.AppendText("Không thể hiển thị ảnh từ giao dịch.\n");
+                    }
+                }
+            }
+        }
+
+        private void DisplayBlockDetails(Block block)
+        {
+            rtbBlockDetails.Clear();
+            rtbBlockDetails.AppendText($"Khối #{block.Index}\n");
+            rtbBlockDetails.AppendText($"Timestamp: {block.Timestamp}\n");
+            rtbBlockDetails.AppendText($"Băm trước: {block.PreviousHash}\n");
+            rtbBlockDetails.AppendText($"Băm: {block.Hash}\n");
+            rtbBlockDetails.AppendText($"Nonce: {block.Nonce}\n");
+            rtbBlockDetails.AppendText($"Merkle Root: {block.MerkleRoot}\n\n");
+
+            rtbBlockDetails.AppendText($"Giao dịch ({block.Transactions.Count}):\n");
+            foreach (var transaction in block.Transactions)
+            {
+                rtbBlockDetails.AppendText($"- {transaction}\n");
+                rtbBlockDetails.AppendText($"  Băm: {transaction.Hash}\n");
+                rtbBlockDetails.AppendText($"  Chữ ký: {(transaction.Signature?.Substring(0, Math.Min(20, transaction.Signature?.Length ?? 0)) + "...")}\n\n");
+            }
+            rtbMerkleTree.Clear();
+            if (block.Transactions.Count == 0)
+            {
+                rtbMerkleTree.AppendText("Không có giao dịch trong khối này.\n");
+                return;
             }
 
-            // Maintain selection if possible
-            if (previousSelectedIndex >= 0 && previousSelectedIndex < lstBlocks.Items.Count)
+            rtbMerkleTree.AppendText($"Cây Merkle cho Khối #{block.Index}\n\n");
+            List<string> txHashes = block.Transactions.ConvertAll(t => t.Hash ?? t.CalculateHash());
+            rtbMerkleTree.AppendText("Băm giao dịch:\n");
+            foreach (var hash in txHashes)
+                rtbMerkleTree.AppendText($"- {hash.Substring(0, Math.Min(12, hash.Length))}...\n");
+
+            rtbMerkleTree.AppendText("\nCấu trúc cây Merkle:\n");
+            var levels = BuildMerkleTreeLevels(txHashes);
+            for (int i = 0; i < levels.Count; i++)
             {
-                lstBlocks.SelectedIndex = previousSelectedIndex;
+                rtbMerkleTree.AppendText($"Tầng {i}: ");
+                foreach (var hash in levels[i])
+                    rtbMerkleTree.AppendText($"{hash.Substring(0, Math.Min(8, hash.Length))}... ");
+                rtbMerkleTree.AppendText("\n");
             }
-            else if (lstBlocks.Items.Count > 0)
+            rtbMerkleTree.AppendText($"\nGốc Merkle: {block.MerkleRoot}\n");
+        }       
+        private List<List<string>> BuildMerkleTreeLevels(List<string> hashes)
+        {
+            List<List<string>> levels = new List<List<string>> { new List<string>(hashes) };
+            while (levels.Last().Count > 1)
             {
-                // Select the newest block (last in the list)
-                lstBlocks.SelectedIndex = lstBlocks.Items.Count - 1;
+                List<string> current = levels.Last();
+                List<string> nextLevel = new List<string>();
+                for (int i = 0; i < current.Count; i += 2)
+                {
+                    string hash = i + 1 < current.Count
+                        ? CryptoHelper.HashPair(current[i], current[i + 1])
+                        : current[i];
+                    nextLevel.Add(hash);
+                }
+                levels.Add(nextLevel);
             }
+            return levels;
         }
 
         private void btnSaveChain_Click(object sender, EventArgs e)
         {
-            SaveFileDialog saveFileDialog = new SaveFileDialog
+            using (SaveFileDialog dialog = new SaveFileDialog { Filter = "JSON files (*.json)|*.json", Title = "Lưu Blockchain" })
             {
-                Filter = "JSON files (*.json)|*.json",
-                Title = "Save Blockchain"
-            };
-
-            if (saveFileDialog.ShowDialog() == DialogResult.OK)
-            {
-                blockchain.SaveToFile(saveFileDialog.FileName);
-                MessageBox.Show(
-                    $"Blockchain saved to {saveFileDialog.FileName}",
-                    "Save Successful",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information
-                );
+                if (dialog.ShowDialog() == DialogResult.OK)
+                {
+                    blockchain.SaveToFile(dialog.FileName);
+                    MessageBox.Show($"Blockchain đã lưu vào {dialog.FileName}", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
             }
         }
 
         private void btnLoadChain_Click(object sender, EventArgs e)
         {
-            OpenFileDialog openFileDialog = new OpenFileDialog
+            using (OpenFileDialog dialog = new OpenFileDialog { Filter = "JSON files (*.json)|*.json", Title = "Tải Blockchain" })
             {
-                Filter = "JSON files (*.json)|*.json",
-                Title = "Load Blockchain"
-            };
-
-            if (openFileDialog.ShowDialog() == DialogResult.OK)
-            {
-                try
+                if (dialog.ShowDialog() == DialogResult.OK)
                 {
-                    string json = File.ReadAllText(openFileDialog.FileName);
-                    rtbLoadedChain.Text = json;
+                    try
+                    {
+                        string json = File.ReadAllText(dialog.FileName);
+                        rtbLoadedChain.Text = json;
+                        blockchain.LoadFromFile(dialog.FileName);
+                        UpdateBlockchainList();
+                        MessageBox.Show("Tải blockchain thành công!", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                    // Load the blockchain from file
-                    blockchain.LoadFromFile(openFileDialog.FileName);
-
-                    // Update the blockchain list to display loaded blocks
-                    UpdateBlockchainList();
-
-                    MessageBox.Show(
-                        "Blockchain file loaded successfully!",
-                        "Load Successful",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information
-                    );
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(
-                        $"Error loading blockchain: {ex.Message}",
-                        "Load Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error
-                    );
+                        if (lstBlocks.Items.Count != blockchain.Chain.Count)
+                            rtbProcessing.AppendText($"Lỗi: lstBlocks hiển thị {lstBlocks.Items.Count} khối, thực tế có {blockchain.Chain.Count} khối sau khi tải.\n");
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Lỗi khi tải: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
                 }
             }
         }
 
         private void btnVerifyLoadedChain_Click(object sender, EventArgs e)
         {
+            if (string.IsNullOrEmpty(rtbLoadedChain.Text))
+            {
+                MessageBox.Show("Vui lòng tải tệp blockchain trước.", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             try
             {
-                if (string.IsNullOrEmpty(rtbLoadedChain.Text))
-                {
-                    MessageBox.Show(
-                        "Please load a blockchain file first.",
-                        "Verification Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning
-                    );
-                    return;
-                }
-
-                // Parse the loaded JSON to a list of blocks
                 List<Block> loadedChain = JsonConvert.DeserializeObject<List<Block>>(rtbLoadedChain.Text);
-
-                // Use the improved verification function
-                string verificationResult = VerifyBlockchain(loadedChain);
-
-                if (verificationResult == "Valid")
-                {
-                    MessageBox.Show(
-                        "Loaded blockchain is valid! No tampering detected.",
-                        "Blockchain Verification",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information
-                    );
-                }
-                else
-                {
-                    MessageBox.Show(
-                        $"Blockchain validation failed: {verificationResult}",
-                        "Blockchain Verification",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error
-                    );
-                }
+                string result = VerifyBlockchain(loadedChain);
+                MessageBox.Show(
+                    result == "Valid" ? "Blockchain hợp lệ!" : $"Blockchain không hợp lệ: {result}",
+                    "Kết quả xác minh",
+                    MessageBoxButtons.OK,
+                    result == "Valid" ? MessageBoxIcon.Information : MessageBoxIcon.Error
+                );
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
-                    $"Error verifying blockchain: {ex.Message}",
-                    "Verification Error",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error
-                );
+                MessageBox.Show($"Lỗi xác minh: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
-
-        // Added comprehensive verification method
-        // Fix the verification function
         private string VerifyBlockchain(List<Block> chain)
         {
             if (chain == null || chain.Count == 0)
-                return "Empty blockchain";
+                return "Blockchain rỗng";
 
-            // Check genesis block
-            if (chain[0].PreviousHash != "0")
-                return "Invalid genesis block";
+            if (chain[0].PreviousHash != "0" || chain[0].Index != 0)
+                return "Khối gốc không hợp lệ";
 
-            // Verify each block
-            for (int i = 1; i < chain.Count; i++)
+            for (int i = 0; i < chain.Count; i++)
             {
-                Block currentBlock = chain[i];
-                Block previousBlock = chain[i - 1];
+                Block block = chain[i];
+                if (block.Index != i)
+                    return $"Khối #{block.Index} có chỉ số không hợp lệ (dự kiến: {i})";
 
-                // Verify block index
-                if (currentBlock.Index != previousBlock.Index + 1)
-                    return $"Block #{currentBlock.Index} has invalid index";
+                if (i > 0 && block.PreviousHash != chain[i - 1].Hash)
+                    return $"Khối #{block.Index} có băm trước không khớp (PreviousHash: {block.PreviousHash}, Hash trước: {chain[i - 1].Hash})";
 
-                // Verify the previous hash pointer
-                if (currentBlock.PreviousHash != previousBlock.Hash)
-                    return $"Block #{currentBlock.Index} has invalid previous hash pointer";
-
-                // Verify transaction data integrity
-                foreach (var transaction in currentBlock.Transactions)
+                foreach (var tx in block.Transactions)
                 {
-                    // Calculate hash based on transaction data to check if data was modified
-                    string transactionData =
-                        transaction.Sender +
-                        transaction.Receiver +
-                        transaction.Date.ToString() +
-                        transaction.Amount.ToString();
-
-                    using (SHA256 sha256 = SHA256.Create())
-                    {
-                        byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(transactionData));
-                        StringBuilder builder = new StringBuilder();
-                        for (int j = 0; j < bytes.Length; j++)
-                        {
-                            builder.Append(bytes[j].ToString("x2"));
-                        }
-
-                        string calculatedHash = builder.ToString();
-
-                        if (calculatedHash != transaction.Hash)
-                            return $"Transaction in Block #{currentBlock.Index} has been tampered with";
-                    }
+                    string hash = tx.CalculateHash();
+                    if (hash != tx.Hash)
+                        return $"Giao dịch trong khối #{block.Index} có băm không hợp lệ (tính toán: {hash}, lưu trữ: {tx.Hash})";
                 }
 
-                // Recalculate Merkle root to verify transaction list integrity
-                List<string> transactionHashes = new List<string>();
-                foreach (var transaction in currentBlock.Transactions)
-                {
-                    transactionHashes.Add(transaction.Hash);
-                }
+                List<string> txHashes = block.Transactions.ConvertAll(t => t.Hash ?? t.CalculateHash());
+                string merkleRoot = txHashes.Count == 0 ? new string('0', 64) : BuildMerkleTree(txHashes);
+                if (merkleRoot != block.MerkleRoot)
+                    return $"Khối #{block.Index} có gốc Merkle không hợp lệ (tính toán: {merkleRoot}, lưu trữ: {block.MerkleRoot})";
 
-                string calculatedMerkleRoot = "";
-                if (transactionHashes.Count > 0)
-                {
-                    calculatedMerkleRoot = CalculateMerkleRoot(transactionHashes);
-                    if (calculatedMerkleRoot != currentBlock.MerkleRoot)
-                        return $"Block #{currentBlock.Index} has invalid Merkle root. Transaction data was tampered with.";
-                }
-
-                // Finally verify the block hash
-                string blockData =
-                    currentBlock.Index.ToString() +
-                    currentBlock.Timestamp.ToString() +
-                    currentBlock.PreviousHash +
-                    currentBlock.Nonce.ToString() +
-                    currentBlock.MerkleRoot;
-
-                string calculatedBlockHash = CalculateHash(blockData);
-                if (calculatedBlockHash != currentBlock.Hash)
-                    return $"Block #{currentBlock.Index} has invalid hash. Block data was tampered with.";
+                string blockData = block.Index.ToString() + block.Timestamp.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ") + block.PreviousHash + block.Nonce.ToString() + block.MerkleRoot;
+                string calculatedHash = CryptoHelper.ComputeHash(blockData);
+                if (calculatedHash != block.Hash)
+                    return $"Khối #{block.Index} có băm không hợp lệ (tính toán: {calculatedHash}, lưu trữ: {block.Hash})";
             }
-
             return "Valid";
         }
 
-        private string CalculateMerkleRoot(List<string> transactionHashes)
+        private string BuildMerkleTree(List<string> hashes)
         {
-            if (transactionHashes.Count == 0)
-                return "0";
-
-            if (transactionHashes.Count == 1)
-                return transactionHashes[0];
+            if (hashes.Count == 0)
+                return new string('0', 64);
+            if (hashes.Count == 1)
+                return hashes[0];
 
             List<string> newHashes = new List<string>();
-
-            for (int i = 0; i < transactionHashes.Count; i += 2)
+            for (int i = 0; i < hashes.Count; i += 2)
             {
-                if (i + 1 < transactionHashes.Count)
-                {
-                    string combinedHash = HashPair(transactionHashes[i], transactionHashes[i + 1]);
-                    newHashes.Add(combinedHash);
-                }
-                else
-                {
-                    newHashes.Add(transactionHashes[i]);
-                }
+                string hash = i + 1 < hashes.Count
+                    ? CryptoHelper.HashPair(hashes[i], hashes[i + 1])
+                    : hashes[i];
+                newHashes.Add(hash);
             }
-
-            return CalculateMerkleRoot(newHashes);
+            return BuildMerkleTree(newHashes);
         }
-
-        // Helper method to calculate hash for verification
-        private string CalculateHash(string data)
-        {
-            using (SHA256 sha256 = SHA256.Create())
-            {
-                byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(data));
-                StringBuilder builder = new StringBuilder();
-                for (int i = 0; i < bytes.Length; i++)
-                {
-                    builder.Append(bytes[i].ToString("x2"));
-                }
-                return builder.ToString();
-            }
-        }
-
-        // Build Merkle root from transaction hashes
-        //private string BuildMerkleRoot(List<string> transactionHashes)
-        //{
-        //    if (transactionHashes.Count == 0)
-        //        return "0";
-
-        //    if (transactionHashes.Count == 1)
-        //        return transactionHashes[0];
-
-        //    List<string> newLevel = new List<string>();
-
-        //    for (int i = 0; i < transactionHashes.Count; i += 2)
-        //    {
-        //        if (i + 1 < transactionHashes.Count)
-        //        {
-        //            // Hash the pair of nodes
-        //            string combinedHash = HashPair(transactionHashes[i], transactionHashes[i + 1]);
-        //            newLevel.Add(combinedHash);
-        //        }
-        //        else
-        //        {
-        //            // Odd number of nodes, promote the last one
-        //            newLevel.Add(transactionHashes[i]);
-        //        }
-        //    }
-
-        //    // Recursively build the next level
-        //    return BuildMerkleRoot(newLevel);
-        //}
-
-        
     }
 }
