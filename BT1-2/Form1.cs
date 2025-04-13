@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
@@ -14,13 +14,14 @@ namespace BT1_2
         private Blockchain blockchain;
         private Transaction currentTransaction;
         private string encryptionKey;
-        private RichTextBox rtbMerkleTreeDisplay;
+        //private RichTextBox rtbMerkleTreeDisplay;
 
         public Form1()
         {
             InitializeComponent();
             blockchain = new Blockchain();
             encryptionKey = CryptoHelper.GenerateRandomKey(32);
+            //rtbMerkleTreeDisplay = rtbMerkleTree;
             UpdateBlockchainList();
         }
 
@@ -107,7 +108,7 @@ namespace BT1_2
 
             bool isValid = currentTransaction.VerifySignature(blockchain.PublicKey);
             rtbProcessing.AppendText($"Signature Verification:\n");
-            rtbProcessing.AppendText($"Verification result: {(isValid ? "Valid ?" : "Invalid ?")}\n\n");
+            rtbProcessing.AppendText($"Verification result: {(isValid ? "Valid ✓" : "Invalid ✗")}\n\n");
 
             if (isValid)
             {
@@ -118,20 +119,18 @@ namespace BT1_2
                 if (blockchain.PendingTransactions.Count >= 5)
                 {
                     rtbProcessing.AppendText($"Reached 5 transactions - Creating a new block...\n");
-                    
-                    // Get the latest block before creating a new one to display the Merkle tree
-                    int countBeforeCreate = blockchain.Chain.Count;
 
                     // Create the block
                     blockchain.CreateBlock();
 
-                    // Display Merkle tree if a new block was created
-                    if (blockchain.Chain.Count > countBeforeCreate)
-                    {
-                        DisplayMerkleTree(blockchain.Chain[blockchain.Chain.Count - 1]);
-                    }
-
+                    // Update the display
                     UpdateBlockchainList();
+
+                    // Select the latest block to display its details
+                    if (lstBlocks.Items.Count > 0)
+                    {
+                        lstBlocks.SelectedIndex = lstBlocks.Items.Count - 1;
+                    }
                 }
 
                 // Reset form for next transaction
@@ -173,48 +172,48 @@ namespace BT1_2
             {
                 rtb.AppendText($"- {transaction}\n");
                 rtb.AppendText($"  Hash: {transaction.Hash}\n");
-                rtb.AppendText($"  Signature: {(transaction.Signature?.Substring(0, 20) + "...")}\n\n");
+                rtb.AppendText($"  Signature: {(transaction.Signature?.Substring(0, Math.Min(20, transaction.Signature?.Length ?? 0)) + "...")}\n\n");
             }
         }
 
         // Add this new method for displaying Merkle tree
         private void DisplayMerkleTree(Block block)
         {
-            rtbMerkleTreeDisplay.Clear();
+            rtbMerkleTree.Clear();
 
             if (block.Transactions.Count == 0)
             {
-                rtbMerkleTreeDisplay.AppendText("No transactions in this block to build Merkle tree.");
+                rtbMerkleTree.AppendText("No transactions in this block to build Merkle tree.");
                 return;
             }
 
             List<string> transactionHashes = new List<string>();
-            rtbMerkleTreeDisplay.AppendText("Merkle Tree for Block #" + block.Index + "\n\n");
+            rtbMerkleTree.AppendText("Merkle Tree for Block #" + block.Index + "\n\n");
 
             // Display transaction hashes (leaves of the tree)
-            rtbMerkleTreeDisplay.AppendText("Transaction Hashes (Leaves):\n");
+            rtbMerkleTree.AppendText("Transaction Hashes (Leaves):\n");
             foreach (var transaction in block.Transactions)
             {
                 string hash = transaction.Hash ?? transaction.CalculateHash();
                 transactionHashes.Add(hash);
-                rtbMerkleTreeDisplay.AppendText($"- {hash.Substring(0, 12)}...\n");
+                rtbMerkleTree.AppendText($"- {hash.Substring(0, Math.Min(12, hash.Length))}...\n");
             }
 
             // Build and display the Merkle tree
-            rtbMerkleTreeDisplay.AppendText("\nMerkle Tree Structure:\n");
+            rtbMerkleTree.AppendText("\nMerkle Tree Structure:\n");
             List<List<string>> merkleTreeLevels = BuildMerkleTreeLevels(transactionHashes);
 
             for (int i = 0; i < merkleTreeLevels.Count; i++)
             {
-                rtbMerkleTreeDisplay.AppendText($"Level {i}: ");
+                rtbMerkleTree.AppendText($"Level {i}: ");
                 foreach (var hash in merkleTreeLevels[i])
                 {
-                    rtbMerkleTreeDisplay.AppendText($"{hash.Substring(0, 8)}... ");
+                    rtbMerkleTree.AppendText($"{hash.Substring(0, Math.Min(8, hash.Length))}... ");
                 }
-                rtbMerkleTreeDisplay.AppendText("\n");
+                rtbMerkleTree.AppendText("\n");
             }
 
-            rtbMerkleTreeDisplay.AppendText("\nMerkle Root: " + block.MerkleRoot);
+            rtbMerkleTree.AppendText("\nMerkle Root: " + block.MerkleRoot);
         }
 
         private List<List<string>> BuildMerkleTreeLevels(List<string> leaves)
@@ -248,15 +247,20 @@ namespace BT1_2
             return levels;
         }
 
-        //private string HashPair(string hash1, string hash2)
-        //{
-        //    using (SHA256 sha256 = SHA256.Create())
-        //    {
-        //        string combinedHash = hash1 + hash2;
-        //        byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(combinedHash));
-        //        return BitConverter.ToString(bytes).Replace("-", "").ToLower();
-        //    }
-        //}
+        private string HashPair(string hash1, string hash2)
+        {
+            using (SHA256 sha256 = SHA256.Create())
+            {
+                string combinedHash = hash1 + hash2;
+                byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(combinedHash));
+                StringBuilder builder = new StringBuilder();
+                for (int i = 0; i < bytes.Length; i++)
+                {
+                    builder.Append(bytes[i].ToString("x2"));
+                }
+                return builder.ToString();
+            }
+        }
 
         private void UpdateBlockchainList()
         {
@@ -392,6 +396,7 @@ namespace BT1_2
         }
 
         // Added comprehensive verification method
+        // Fix the verification function
         private string VerifyBlockchain(List<Block> chain)
         {
             if (chain == null || chain.Count == 0)
@@ -415,45 +420,87 @@ namespace BT1_2
                 if (currentBlock.PreviousHash != previousBlock.Hash)
                     return $"Block #{currentBlock.Index} has invalid previous hash pointer";
 
-                // IMPORTANT: Recalculate the block hash based on its content
-                // This will detect if any field in the block header was changed
-                string blockHeaderData =
-                    currentBlock.Index.ToString() +
-                    currentBlock.Timestamp.ToString() +
-                    currentBlock.PreviousHash +
-                    currentBlock.Nonce.ToString() +
-                    currentBlock.MerkleRoot;
-
-                string recalculatedBlockHash = CalculateHash(blockHeaderData);
-                if (recalculatedBlockHash != currentBlock.Hash)
-                    return $"Block #{currentBlock.Index} has invalid hash. Data was tampered with.";
-
-                // Verify each transaction and rebuild Merkle root
-                List<string> transactionHashes = new List<string>();
+                // Verify transaction data integrity
                 foreach (var transaction in currentBlock.Transactions)
                 {
-                    // Recalculate each transaction's hash to check if transaction data was modified
+                    // Calculate hash based on transaction data to check if data was modified
                     string transactionData =
                         transaction.Sender +
                         transaction.Receiver +
                         transaction.Date.ToString() +
                         transaction.Amount.ToString();
 
-                    string recalculatedTransactionHash = CalculateHash(transactionData);
+                    using (SHA256 sha256 = SHA256.Create())
+                    {
+                        byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(transactionData));
+                        StringBuilder builder = new StringBuilder();
+                        for (int j = 0; j < bytes.Length; j++)
+                        {
+                            builder.Append(bytes[j].ToString("x2"));
+                        }
 
-                    if (recalculatedTransactionHash != transaction.Hash)
-                        return $"Transaction in Block #{currentBlock.Index} has been tampered with";
+                        string calculatedHash = builder.ToString();
 
-                    transactionHashes.Add(recalculatedTransactionHash);
+                        if (calculatedHash != transaction.Hash)
+                            return $"Transaction in Block #{currentBlock.Index} has been tampered with";
+                    }
                 }
 
-                // Rebuild Merkle root from transaction hashes
-                string recalculatedMerkleRoot = BuildMerkleRoot(transactionHashes);
-                if (recalculatedMerkleRoot != currentBlock.MerkleRoot)
-                    return $"Block #{currentBlock.Index} has invalid Merkle root. Transaction data was tampered with.";
+                // Recalculate Merkle root to verify transaction list integrity
+                List<string> transactionHashes = new List<string>();
+                foreach (var transaction in currentBlock.Transactions)
+                {
+                    transactionHashes.Add(transaction.Hash);
+                }
+
+                string calculatedMerkleRoot = "";
+                if (transactionHashes.Count > 0)
+                {
+                    calculatedMerkleRoot = CalculateMerkleRoot(transactionHashes);
+                    if (calculatedMerkleRoot != currentBlock.MerkleRoot)
+                        return $"Block #{currentBlock.Index} has invalid Merkle root. Transaction data was tampered with.";
+                }
+
+                // Finally verify the block hash
+                string blockData =
+                    currentBlock.Index.ToString() +
+                    currentBlock.Timestamp.ToString() +
+                    currentBlock.PreviousHash +
+                    currentBlock.Nonce.ToString() +
+                    currentBlock.MerkleRoot;
+
+                string calculatedBlockHash = CalculateHash(blockData);
+                if (calculatedBlockHash != currentBlock.Hash)
+                    return $"Block #{currentBlock.Index} has invalid hash. Block data was tampered with.";
             }
 
             return "Valid";
+        }
+
+        private string CalculateMerkleRoot(List<string> transactionHashes)
+        {
+            if (transactionHashes.Count == 0)
+                return "0";
+
+            if (transactionHashes.Count == 1)
+                return transactionHashes[0];
+
+            List<string> newHashes = new List<string>();
+
+            for (int i = 0; i < transactionHashes.Count; i += 2)
+            {
+                if (i + 1 < transactionHashes.Count)
+                {
+                    string combinedHash = HashPair(transactionHashes[i], transactionHashes[i + 1]);
+                    newHashes.Add(combinedHash);
+                }
+                else
+                {
+                    newHashes.Add(transactionHashes[i]);
+                }
+            }
+
+            return CalculateMerkleRoot(newHashes);
         }
 
         // Helper method to calculate hash for verification
@@ -472,48 +519,35 @@ namespace BT1_2
         }
 
         // Build Merkle root from transaction hashes
-        private string BuildMerkleRoot(List<string> transactionHashes)
-        {
-            if (transactionHashes.Count == 0)
-                return "0";
+        //private string BuildMerkleRoot(List<string> transactionHashes)
+        //{
+        //    if (transactionHashes.Count == 0)
+        //        return "0";
 
-            if (transactionHashes.Count == 1)
-                return transactionHashes[0];
+        //    if (transactionHashes.Count == 1)
+        //        return transactionHashes[0];
 
-            List<string> newLevel = new List<string>();
+        //    List<string> newLevel = new List<string>();
 
-            for (int i = 0; i < transactionHashes.Count; i += 2)
-            {
-                if (i + 1 < transactionHashes.Count)
-                {
-                    // Hash the pair of nodes
-                    string combinedHash = HashPair(transactionHashes[i], transactionHashes[i + 1]);
-                    newLevel.Add(combinedHash);
-                }
-                else
-                {
-                    // Odd number of nodes, promote the last one
-                    newLevel.Add(transactionHashes[i]);
-                }
-            }
+        //    for (int i = 0; i < transactionHashes.Count; i += 2)
+        //    {
+        //        if (i + 1 < transactionHashes.Count)
+        //        {
+        //            // Hash the pair of nodes
+        //            string combinedHash = HashPair(transactionHashes[i], transactionHashes[i + 1]);
+        //            newLevel.Add(combinedHash);
+        //        }
+        //        else
+        //        {
+        //            // Odd number of nodes, promote the last one
+        //            newLevel.Add(transactionHashes[i]);
+        //        }
+        //    }
 
-            // Recursively build the next level
-            return BuildMerkleRoot(newLevel);
-        }
+        //    // Recursively build the next level
+        //    return BuildMerkleRoot(newLevel);
+        //}
 
-        private string HashPair(string hash1, string hash2)
-        {
-            using (SHA256 sha256 = SHA256.Create())
-            {
-                string combinedHash = hash1 + hash2;
-                byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(combinedHash));
-                StringBuilder builder = new StringBuilder();
-                for (int i = 0; i < bytes.Length; i++)
-                {
-                    builder.Append(bytes[i].ToString("x2"));
-                }
-                return builder.ToString();
-            }
-        }
+        
     }
 }
